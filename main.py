@@ -11,6 +11,15 @@ import asyncio
 
 load_dotenv()
 
+#tracking usage
+def print_usage_stats(usage: Usage, label: str = "Current"):
+    print(f"\n{label} Usage Stats:")
+    print(f"Requests: {usage.requests}")
+    print(f"Request Tokens: {usage.request_tokens}")
+    print(f"Response Tokens: {usage.response_tokens}")
+    print(f"Total Tokens: {usage.total_tokens}")
+    if usage.details:
+        print("Additional Details:", usage.details)
 
 #creating structured answers that we expect the agent will produce
 class FlightDetails(BaseModel):
@@ -101,19 +110,19 @@ flights_web_page = """
 5. Flight CHI-MIA202
 - Price: $200
 - Origin: Chicago O'Hare International Airport (ORD)
-- Destination: Miami International Airport (MIA)
+- Destination: Toronto Pearson International Airport(YYZ)
 - Date: January 12, 2025
 
-6. Flight BOS-SEA303
+6. Flight BOS-YYZ303
 - Price: $120
 - Origin: Boston Logan International Airport (BOS)
-- Destination: Ted Stevens Anchorage International Airport (ANC)
-- Date: January 12, 2025
+- Destination: Toronto Pearson International Airport(YYZ)
+- Date: January 10, 2025
 
-7. Flight DFW-DEN404
-- Price: $150
-- Origin: Dallas/Fort Worth International Airport (DFW)
-- Destination: Denver International Airport (DEN)
+7. Flight BOS-YYZ404
+- Price: $250
+- Origin: Boston Logan International Airport (BOS)
+- Destination: Toronto Pearson International Airport(YYZ)
 - Date: January 10, 2025
 
 8. Flight ATL-HOU505
@@ -137,20 +146,25 @@ async def main():
     deps = Deps(
         web_page_text=flights_web_page,
         req_date=datetime.date(2025,1,10),
-        req_origin='SFO',
-        req_destination='FAI'
+        req_origin='BOS',
+        req_destination='YYZ'
     )
     message_history: list[ModelMessage] | None = None
     usage: Usage = Usage()
-
+    print_usage_stats(usage, "Initial")
+    counter = 0
     while True:
+        # we ask the LLM to do a direct search by giving it a simple json list of flights and there is no surprise that it makes mistake
         result = await search_agent.run(
             f"find me a flight  from {deps.req_origin} to {deps.req_destination}",
             deps=deps,
             usage=usage,
             message_history=message_history)
+        counter+= 1
+        print(f"Agent run {counter} time")
         if isinstance(result.data, NonFlightFound):
             print("No Flight found!")
+            print_usage_stats(usage, f"Updated {counter}")
             break
         else:
             flight = result.data
@@ -161,11 +175,13 @@ async def main():
             if answer == "buy":
                 seat = await find_seat(usage)
                 await buy_ticket(flight, seat)
+                print_usage_stats(usage, f"Updated {counter}")
                 break
             else:
                 message_history = result.all_messages(
                     result_tool_return_content='Please suggest another flight'
                 )
+            print_usage_stats(usage, f"Updated {counter}")
 
 
 async def find_seat(usage: Usage) -> SeatPreference:
@@ -186,6 +202,9 @@ async def find_seat(usage: Usage) -> SeatPreference:
 
 async def buy_ticket(flight_details: FlightDetails, seat: SeatPreference) -> str:
     print(f"Purchasing Flight: \n {flight_details} \n Seat: {seat}\n")
+
+
+
 
 asyncio.run(main())
 
