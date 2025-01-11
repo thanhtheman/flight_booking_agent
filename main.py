@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from datetime import datetime
+import datetime
 from dataclasses import dataclass
 from pydantic_ai import Agent, RunContext, ModelRetry
 from dotenv import load_dotenv
@@ -138,16 +138,16 @@ async def main():
         web_page_text=flights_web_page,
         req_date=datetime.date(2025,1,10),
         req_origin='SFO',
-        req_destination='ANC'
+        req_destination='FAI'
     )
     message_history: list[ModelMessage] | None = None
-    usage: Usage
+    usage: Usage = Usage()
 
     while True:
         result = await search_agent.run(
             f"find me a flight  from {deps.req_origin} to {deps.req_destination}",
             deps=deps,
-            usage=usage_limits,
+            usage=usage,
             message_history=message_history)
         if isinstance(result.data, NonFlightFound):
             print("No Flight found!")
@@ -160,6 +160,12 @@ async def main():
                                 show_choices=False)
             if answer == "buy":
                 seat = await find_seat(usage)
+                await buy_ticket(flight, seat)
+                break
+            else:
+                message_history = result.all_messages(
+                    result_tool_return_content='Please suggest another flight'
+                )
 
 
 async def find_seat(usage: Usage) -> SeatPreference:
