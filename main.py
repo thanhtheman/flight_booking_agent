@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from typing_extensions import Literal
 from pydantic_ai.usage import Usage, UsageLimits
 from pydantic_ai.messages import ModelMessage
+from rich.prompt import Prompt
 import asyncio
 
 load_dotenv()
@@ -140,3 +141,45 @@ async def main():
         req_destination='ANC'
     )
     message_history: list[ModelMessage] | None = None
+    usage: Usage
+
+    while True:
+        result = await search_agent.run(
+            f"find me a flight  from {deps.req_origin} to {deps.req_destination}",
+            deps=deps,
+            usage=usage_limits,
+            message_history=message_history)
+        if isinstance(result.data, NonFlightFound):
+            print("No Flight found!")
+            break
+        else:
+            flight = result.data
+            print(f"I found you this flight: \n {flight}\n")
+            answer = Prompt.ask("Do you want to buy this flight or keep searching? please type 'buy' or 'search'",
+                                choices=['buy', 'search', ''],
+                                show_choices=False)
+            if answer == "buy":
+                seat = await find_seat(usage)
+
+
+async def find_seat(usage: Usage) -> SeatPreference:
+    message_history: list[ModelMessage] | None = None
+    while True:
+        answer = Prompt.ask("What seat do you want?")
+        result = await seat_preference_agent.run(
+                                                user_prompt=answer,
+                                                message_history=message_history,
+                                                usage=usage,
+                                                usage_limits=usage_limits
+                                                )
+        if isinstance(result.data, SeatPreference):
+            return result.data
+        else:
+            print("Could not understand seat preference ")
+            message_history = result.all_messages_json()
+
+async def buy_ticket(flight_details: FlightDetails, seat: SeatPreference) -> str:
+    print(f"Purchasing Flight: \n {flight_details} \n Seat: {seat}\n")
+
+asyncio.run(main())
+
